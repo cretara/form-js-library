@@ -1,72 +1,61 @@
+import Sandbox from 'websandbox';
 import { useCallback, useEffect, useState } from 'preact/hooks';
-import { useExpressionEvaluation, useDeepCompareMemoize, usePrevious } from '../../hooks';
+import { useExpressionEvaluation, useDeepCompareMemoize } from '../../hooks';
 import { isObject } from 'min-dash';
 
-const type = 'script';
 
 export function JSFunctionField(props) {
   const { field, onChange } = props;
-  const { jsFunction, functionParameters, onLoadOnly } = field;
+  const { jsFunction, functionParameters } = field;
 
-  const [ loadLatch, setLoadLatch ] = useState(false);
+  const [ sandbox, setSandbox ] = useState(null);
 
   const paramsEval = useExpressionEvaluation(functionParameters);
   const params = useDeepCompareMemoize(isObject(paramsEval) ? paramsEval : {});
 
-  const functionMemo = useCallback((params) => {
-
-    const cleanupCallbacks = [];
-
-    try {
-
-      setLoadLatch(true);
-      const func = new Function('data', 'setValue', 'onCleanup', jsFunction);
-      func(params, value => onChange({ field, value }), callback => cleanupCallbacks.push(callback));
-
-    } catch (error) {
-
-      // invalid expression definition, may happen during editing
-      if (error instanceof SyntaxError) {
-        return;
+  const rebuildSandbox = useCallback(() => {
+    const localApi = {
+      setValue: function(value) {
+        onChange({ field, value });
       }
-
-      console.error('Error evaluating expression:', error);
-      onChange({ field, value: null });
-    }
-
-    return () => {
-      cleanupCallbacks.forEach(fn => fn());
     };
 
-  }, [ jsFunction, field, onChange ]);
+    const newSandbox = Sandbox.create(localApi, {
+      frameContainer: '.iframe__container',
+      frameClassName: 'simple__iframe'
+    });
 
-  const previousFunctionMemo = usePrevious(functionMemo);
-  const previousParams = usePrevious(params);
+    newSandbox.promise.then((sandboxInstance) => {
+      setSandbox(sandboxInstance);
+      sandboxInstance.run(`
+        Websandbox.connection.setLocalApi({
+          onInit: () => Websandbox.connection.remote.onInit(),
+          onData: (data) => Websandbox.connection.remote.onData(data),
+        });
+
+        // Custom user code
+        ${jsFunction}
+      `);
+
+      sandboxInstance.connection.remote.onInit();
+    });
+  }, [ jsFunction, onChange, field ]);
 
   useEffect(() => {
+    rebuildSandbox();
+  }, [ rebuildSandbox ]);
 
-    // reset load latch
-    if (!onLoadOnly && loadLatch) {
-      setLoadLatch(false);
+  useEffect(() => {
+    if (sandbox && sandbox.connection && sandbox.connection.remote.onData) {
+      sandbox.connection.remote.onData(params);
     }
-
-    const functionChanged = previousFunctionMemo !== functionMemo;
-    const paramsChanged = previousParams !== params;
-    const alreadyLoaded = onLoadOnly && loadLatch;
-
-    const shouldExecute = functionChanged || paramsChanged && !alreadyLoaded;
-
-    if (shouldExecute) {
-      return functionMemo(params);
-    }
-
-  }, [ previousFunctionMemo, functionMemo, previousParams, params, loadLatch, onLoadOnly ]);
+  }, [ params, sandbox ]);
 
   return null;
 }
 
 JSFunctionField.config = {
-  type,
+  type: 'script',
   label: 'JS Function',
   group: 'basic-input',
   keyed: true,
