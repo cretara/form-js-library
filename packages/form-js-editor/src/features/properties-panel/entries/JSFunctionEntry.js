@@ -1,4 +1,4 @@
-import { FeelEntry, isFeelEntryEdited, TextAreaEntry, isTextAreaEntryEdited, ToggleSwitchEntry, isToggleSwitchEntryEdited } from '@bpmn-io/properties-panel';
+import { FeelEntry, isFeelEntryEdited, TextAreaEntry, isTextAreaEntryEdited } from '@bpmn-io/properties-panel';
 import { get } from 'min-dash';
 
 import { useService, useVariables } from '../hooks';
@@ -24,14 +24,6 @@ export function JSFunctionEntry(props) {
       editField: editField,
       field: field,
       isEdited: isTextAreaEntryEdited,
-      isDefaultVisible: (field) => field.type === 'script'
-    },
-    {
-      id: 'on-load-only',
-      component: OnLoadOnlyEntry,
-      editField: editField,
-      field: field,
-      isEdited: isToggleSwitchEntryEdited,
       isDefaultVisible: (field) => field.type === 'script'
     }
   ];
@@ -76,7 +68,7 @@ function FunctionParameters(props) {
     id,
     label: 'Function parameters',
     tooltip,
-    description: 'Define the parameters to pass to the javascript context.',
+    description: 'Define the parameters to pass to the javascript sandbox.',
     setValue,
     variables
   });
@@ -105,35 +97,9 @@ function FunctionDefinition(props) {
     debounce,
     element: field,
     getValue,
-    description: 'Access function parameters via `data`, set results with `setValue`, and register cleanup functions with `onCleanup`.',
+    description: 'Define the javascript function to execute. Register lifecycle hooks with onLoad({data}) and onData({data}). Use setValue(value) to return the result.',
     id,
     label: 'Javascript code',
-    setValue
-  });
-}
-
-function OnLoadOnlyEntry(props) {
-  const {
-    editField,
-    field,
-    id
-  } = props;
-
-  const path = [ 'onLoadOnly' ];
-
-  const getValue = () => {
-    return !!get(field, path, false);
-  };
-
-  const setValue = (value) => {
-    editField(field, path, value);
-  };
-
-  return ToggleSwitchEntry({
-    element: field,
-    id,
-    label: 'Execute on load only',
-    getValue,
     setValue
   });
 }
